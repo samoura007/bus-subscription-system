@@ -7,7 +7,7 @@
 namespace bus {
 
 static const QStringList WEEKDAYS = {
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+    "Sunday", "Monday", "Teusday", "Wednesday", "Thursday"
 };
 
 UserDashboard::UserDashboard(NetworkManager* net,
@@ -44,10 +44,12 @@ void UserDashboard::buildUI() {
     auto* routesL  = new QVBoxLayout(routesW);
     m_routesList   = new QListWidget;
     auto* subBtn   = new QPushButton("Subscribe to Selected Route");
-    routesL->addWidget(new QLabel("Available Routes:"));
+    auto* bookBtn = new QPushButton("Book Ticket/Ride on Selected Route");
     routesL->addWidget(m_routesList);
     routesL->addWidget(subBtn);
+    routesL->addWidget(bookBtn);
     connect(subBtn, &QPushButton::clicked, this, &UserDashboard::onSubscribeClicked);
+    connect(bookBtn, &QPushButton::clicked, this, &UserDashboard::onBookRideClicked);routesL->addWidget(new QLabel("Available Routes:"));
     tabs->addTab(routesW, "Routes");
 
     // ---- Subscriptions tab ----
@@ -55,13 +57,10 @@ void UserDashboard::buildUI() {
     auto* subsL    = new QVBoxLayout(subsW);
     m_subsList     = new QListWidget;
     auto* unsubBtn = new QPushButton("Unsubscribe from Selected");
-    auto* rideBtn  = new QPushButton("Report Ride on Selected Route");
     subsL->addWidget(new QLabel("My Subscriptions:"));
     subsL->addWidget(m_subsList);
     subsL->addWidget(unsubBtn);
-    subsL->addWidget(rideBtn);
     connect(unsubBtn, &QPushButton::clicked, this, &UserDashboard::onUnsubscribeClicked);
-    connect(rideBtn,  &QPushButton::clicked, this, &UserDashboard::onReportRideClicked);
     tabs->addTab(subsW, "My Subscriptions");
 
     // ---- Tickets tab ----
@@ -145,8 +144,8 @@ void UserDashboard::onUnsubscribeClicked() {
     m_net->sendRequest(req);
 }
 
-void UserDashboard::onReportRideClicked() {
-    auto* item = m_subsList->currentItem();
+void UserDashboard::onBookRideClicked() {
+    auto* item = m_routesList->currentItem();
     if (!item) { showStatus("Select a route first.", true); return; }
     nlohmann::json req;
     req["type"]    = MSG_RIDE;
@@ -164,6 +163,7 @@ void UserDashboard::onSaveFreeTimeClicked() {
         slot["startTime"] = m_startEdits[i]->time().toString("HH:mm").toStdString();
         slot["endTime"]   = m_endEdits[i]->time().toString("HH:mm").toStdString();
         timeSlots.push_back(slot);
+
     }
     nlohmann::json req;
     req["type"]  = MSG_SET_FREETIME;
@@ -198,9 +198,15 @@ void UserDashboard::onMessageReceived(const nlohmann::json& msg) {
         if (msg.contains("tickets")) {
             m_ticketsList->clear();
             for (const auto& t : msg["tickets"]) {
-                QString text = "Ticket #" + QString::number(t["id"].get<int>())
+                QString chargeStatus = t.value("charged", false) ? "[Charged]" : "[Free]";
+		int price = t.value("price", 0);
+
+		QString text = "Ticket #" + QString::number(t["id"].get<int>())
                              + "  Route: " + QString::number(t["routeId"].get<int>())
-                             + "  At: " + QString::fromStdString(t["issuedAt"].get<std::string>());
+                             + "  At: " + QString::fromStdString(t["issuedAt"].get<std::string>())
+			     + " " + chargeStatus
+			     + " | Price: " + QString::number(price) + " EGP";
+
                 m_ticketsList->addItem(text);
             }
         } else if (msg.contains("message")) {
