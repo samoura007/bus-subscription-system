@@ -30,7 +30,7 @@ public:
     bool isSubscribed(int userId, int routeId) const;
     std::vector<int> getSubscribedRouteIds(int userId) const;
 
-    int issueTicket(int userId, int routeId, const std::string& timestamp);
+    int issueTicket(int userId, int routeId, const std::string& timestamp, bool charged, int price);
     std::vector<Ticket> getTicketsForUser(int userId) const;
 
     void setFreeSlots(int userId, const std::vector<FreeSlot>& slots);

@@ -8,7 +8,7 @@
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
-    app.setApplicationName("AUC Bus Subscription System");
+    app.setApplicationName("AUC Bus Service");
 
     bus::NetworkManager netManager;
 

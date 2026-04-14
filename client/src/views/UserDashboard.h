@@ -26,7 +26,7 @@ signals:
 private slots:
     void onSubscribeClicked();
     void onUnsubscribeClicked();
-    void onReportRideClicked();
+    void onBookRideClicked();
     void onSaveFreeTimeClicked();
     void onRefreshClicked();
     void onMessageReceived(const nlohmann::json& msg);

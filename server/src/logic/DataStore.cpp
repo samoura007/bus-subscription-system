@@ -132,13 +132,15 @@ std::vector<int> DataStore::getSubscribedRouteIds(int userId) const {
     return ids;
 }
 
-int DataStore::issueTicket(int userId, int routeId, const std::string& timestamp) {
+int DataStore::issueTicket(int userId, int routeId, const std::string& timestamp, bool charged, int price) {
     std::lock_guard<std::mutex> lock(m_mutex);
     Ticket t;
     t.id       = m_nextTicketId++;
     t.userId   = userId;
     t.routeId  = routeId;
     t.issuedAt = timestamp;
+    t.charged = charged;
+    t.price = price;
     m_tickets.push_back(t);
     return t.id;
 }

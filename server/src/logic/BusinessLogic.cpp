@@ -201,7 +201,10 @@ void BusinessLogic::handleRide(INetworkClient* client, int uid,
         reply["ticketIssued"] = false;
         reply["message"]      = "Ride recorded. Valid subscription.";
     } else {
-        int tid = m_store.issueTicket(uid, rid, currentTimestamp());
+	bool isSub = m_store.isSubscribed(uid, rid);
+	int ticketPrice = isSub ? 0 : 120;
+
+	int tid = m_store.issueTicket(uid, rid, currentTimestamp(), !isSub, ticketPrice);
         reply["ticketIssued"] = true;
         reply["ticketId"]     = tid;
         reply["message"]      = "No subscription. Ticket #" + std::to_string(tid) + " issued.";
