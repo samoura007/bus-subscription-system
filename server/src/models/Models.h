@@ -1,0 +1,69 @@
+#pragma once
+#include <string>
+#include <nlohmann/json.hpp>
+
+namespace bus {
+
+struct User {
+    int id = 0;
+    std::string username;
+    std::string passwordHash;
+    std::string role;
+
+    nlohmann::json toPublicJson() const {
+        nlohmann::json j;
+        j["id"]       = id;
+        j["username"] = username;
+        j["role"]     = role;
+        return j;
+    }
+};
+
+struct Route {
+    int id = 0;
+    std::string name;
+    std::string stops;
+    std::string schedule;
+
+    nlohmann::json toJson() const {
+        nlohmann::json j;
+        j["id"]       = id;
+        j["name"]     = name;
+        j["stops"]    = stops;
+        j["schedule"] = schedule;
+        return j;
+    }
+};
+
+struct Ticket {
+    int id = 0;
+    int userId = 0;
+    int routeId = 0;
+    std::string issuedAt;
+
+    nlohmann::json toJson() const {
+        nlohmann::json j;
+        j["id"]       = id;
+        j["userId"]   = userId;
+        j["routeId"]  = routeId;
+        j["issuedAt"] = issuedAt;
+        return j;
+    }
+};
+
+struct FreeSlot {
+    int userId = 0;
+    std::string day;
+    std::string startTime;
+    std::string endTime;
+
+    nlohmann::json toJson() const {
+        nlohmann::json j;
+        j["day"]       = day;
+        j["startTime"] = startTime;
+        j["endTime"]   = endTime;
+        return j;
+    }
+};
+
+} // namespace bus
