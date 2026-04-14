@@ -156,18 +156,18 @@ void UserDashboard::onReportRideClicked() {
 
 void UserDashboard::onSaveFreeTimeClicked() {
     // Build JSON without any nested brace initialization
-    nlohmann::json slots = nlohmann::json::array();
+    nlohmann::json timeSlots = nlohmann::json::array();
     for (int i = 0; i < m_dayChecks.size(); i++) {
         if (!m_dayChecks[i]->isChecked()) continue;
         nlohmann::json slot;
         slot["day"]       = WEEKDAYS[i].toStdString();
         slot["startTime"] = m_startEdits[i]->time().toString("HH:mm").toStdString();
         slot["endTime"]   = m_endEdits[i]->time().toString("HH:mm").toStdString();
-        slots.push_back(slot);
+        timeSlots.push_back(slot);
     }
     nlohmann::json req;
     req["type"]  = MSG_SET_FREETIME;
-    req["slots"] = slots;
+    req["slots"] = timeSlots;
     m_net->sendRequest(req);
 }
 
