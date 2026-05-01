@@ -43,29 +43,31 @@ struct Ticket {
     bool charged = false;
     int price = 0;
 
-
     nlohmann::json toJson() const {
         nlohmann::json j;
         j["id"]       = id;
         j["userId"]   = userId;
         j["routeId"]  = routeId;
         j["issuedAt"] = issuedAt;
-        j["charged"] = charged;
-	j["price"] = price;
-	return j;
+        j["charged"]  = charged;
+        j["price"]    = price;
+        return j;
     }
 };
-struct FreeSlot {
+
+struct RouteVote {
     int userId = 0;
+    int routeId = 0;
     std::string day;
-    std::string startTime;
-    std::string endTime;
+    std::string timeSlot;
+    std::string direction;
 
     nlohmann::json toJson() const {
         nlohmann::json j;
+        j["routeId"]   = routeId;
         j["day"]       = day;
-        j["startTime"] = startTime;
-        j["endTime"]   = endTime;
+        j["timeSlot"]  = timeSlot;
+        j["direction"] = direction;
         return j;
     }
 };

@@ -44,22 +44,14 @@ nlohmann::json BusinessLogic::makeOk(const std::string& msg) {
     return j;
 }
 
-void BusinessLogic::handleMessage(INetworkClient* client,
-                                  int& sessionUserId,
-                                  const nlohmann::json& req) {
-    if (!req.contains("type")) {
-        client->sendMessage(makeError("Missing type field"));
-        return;
-    }
+void BusinessLogic::handleMessage(INetworkClient* client, int& sessionUserId, const nlohmann::json& req) {
+    if (!req.contains("type")) { client->sendMessage(makeError("Missing type field")); return; }
     std::string type = req["type"].get<std::string>();
 
     if (type == MSG_REGISTER) { handleRegister(client, sessionUserId, req); return; }
     if (type == MSG_LOGIN)    { handleLogin   (client, sessionUserId, req); return; }
 
-    if (sessionUserId == 0) {
-        client->sendMessage(makeError("Not authenticated"));
-        return;
-    }
+    if (sessionUserId == 0) { client->sendMessage(makeError("Not authenticated")); return; }
 
     if      (type == MSG_GET_ROUTES)   handleGetRoutes  (client);
     else if (type == MSG_ADD_ROUTE)    handleAddRoute   (client, sessionUserId, req);
@@ -69,110 +61,67 @@ void BusinessLogic::handleMessage(INetworkClient* client,
     else if (type == MSG_GET_SUBS)     handleGetSubs    (client, sessionUserId);
     else if (type == MSG_RIDE)         handleRide       (client, sessionUserId, req);
     else if (type == MSG_GET_TICKETS)  handleGetTickets (client, sessionUserId);
-    else if (type == MSG_SET_FREETIME) handleSetFreetime(client, sessionUserId, req);
-    else if (type == MSG_GET_FREETIME) handleGetFreetime(client, sessionUserId);
     else if (type == MSG_GET_USERS)    handleGetUsers   (client, sessionUserId);
+    else if (type == MSG_SET_VOTES)    handleSetVotes   (client, sessionUserId, req);
+    else if (type == MSG_GET_VOTES)    handleGetVotes   (client, sessionUserId);
+    else if (type == MSG_GET_DEMAND)   handleGetDemand  (client, sessionUserId);
+    else if (type == MSG_DISPATCH_BUS) handleDispatchBus(client, sessionUserId, req);
     else client->sendMessage(makeError("Unknown message type: " + type));
 }
 
-void BusinessLogic::handleRegister(INetworkClient* client, int& uid,
-                                   const nlohmann::json& req) {
-    if (!req.contains("username") || !req.contains("password")) {
-        client->sendMessage(makeError("Missing username or password")); return;
-    }
+void BusinessLogic::handleRegister(INetworkClient* client, int& uid, const nlohmann::json& req) {
+    if (!req.contains("username") || !req.contains("password")) { client->sendMessage(makeError("Missing fields")); return; }
     std::string username = req["username"].get<std::string>();
     std::string password = req["password"].get<std::string>();
-    if (username.empty()) {
-        client->sendMessage(makeError("Username cannot be empty")); return;
-    }
-    if (password.size() < 6) {
-        client->sendMessage(makeError("Password must be at least 6 characters")); return;
-    }
-    if (!m_store.addUser(username, hashPassword(password), ROLE_USER)) {
-        client->sendMessage(makeError("Username already taken")); return;
-    }
+    if (username.empty() || password.size() < 6) { client->sendMessage(makeError("Invalid data")); return; }
+    if (!m_store.addUser(username, hashPassword(password), ROLE_USER)) { client->sendMessage(makeError("Taken")); return; }
     auto u = m_store.findUserByUsername(username);
     uid = u->id;
-    nlohmann::json reply;
-    reply["type"] = MSG_AUTH_OK;
-    reply["user"] = u->toPublicJson();
+    nlohmann::json reply; reply["type"] = MSG_AUTH_OK; reply["user"] = u->toPublicJson();
     client->sendMessage(reply);
 }
 
-void BusinessLogic::handleLogin(INetworkClient* client, int& uid,
-                                const nlohmann::json& req) {
-    if (!req.contains("username") || !req.contains("password")) {
-        client->sendMessage(makeError("Missing username or password")); return;
-    }
-    std::string username = req["username"].get<std::string>();
-    std::string password = req["password"].get<std::string>();
+void BusinessLogic::handleLogin(INetworkClient* client, int& uid, const nlohmann::json& req) {
+    std::string username = req.value("username", "");
+    std::string password = req.value("password", "");
     auto u = m_store.findUserByUsername(username);
-    if (!u || u->passwordHash != hashPassword(password)) {
-        client->sendMessage(makeError("Invalid username or password")); return;
-    }
+    if (!u || u->passwordHash != hashPassword(password)) { client->sendMessage(makeError("Invalid credentials")); return; }
     uid = u->id;
-    nlohmann::json reply;
-    reply["type"] = MSG_AUTH_OK;
-    reply["user"] = u->toPublicJson();
+    nlohmann::json reply; reply["type"] = MSG_AUTH_OK; reply["user"] = u->toPublicJson();
     client->sendMessage(reply);
 }
 
 void BusinessLogic::handleGetRoutes(INetworkClient* client) {
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& r : m_store.getAllRoutes()) arr.push_back(r.toJson());
-    nlohmann::json reply;
-    reply["type"]   = MSG_ROUTES_LIST;
-    reply["routes"] = arr;
+    nlohmann::json reply; reply["type"] = MSG_ROUTES_LIST; reply["routes"] = arr;
     client->sendMessage(reply);
 }
 
-void BusinessLogic::handleAddRoute(INetworkClient* client, int uid,
-                                   const nlohmann::json& req) {
+void BusinessLogic::handleAddRoute(INetworkClient* client, int uid, const nlohmann::json& req) {
     auto u = m_store.findUserById(uid);
-    if (!u || u->role != ROLE_ADMIN) {
-        client->sendMessage(makeError("Admins only")); return;
-    }
-    if (!req.contains("name")) {
-        client->sendMessage(makeError("Route name required")); return;
-    }
-    int id = m_store.addRoute(req["name"].get<std::string>(),
-                              req.value("stops",""),
-                              req.value("schedule",""));
-    nlohmann::json reply;
-    reply["type"]    = MSG_ROUTE_OK;
-    reply["routeId"] = id;
+    if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
+    int id = m_store.addRoute(req.value("name",""), req.value("stops",""), req.value("schedule",""));
+    nlohmann::json reply; reply["type"] = MSG_ROUTE_OK; reply["routeId"] = id;
     client->sendMessage(reply);
 }
 
-void BusinessLogic::handleDelRoute(INetworkClient* client, int uid,
-                                   const nlohmann::json& req) {
+void BusinessLogic::handleDelRoute(INetworkClient* client, int uid, const nlohmann::json& req) {
     auto u = m_store.findUserById(uid);
-    if (!u || u->role != ROLE_ADMIN) {
-        client->sendMessage(makeError("Admins only")); return;
-    }
-    if (!m_store.deleteRoute(req.value("routeId",-1))) {
-        client->sendMessage(makeError("Route not found")); return;
-    }
+    if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
+    if (!m_store.deleteRoute(req.value("routeId",-1))) { client->sendMessage(makeError("Not found")); return; }
     client->sendMessage(makeOk("Route deleted"));
 }
 
-void BusinessLogic::handleSubscribe(INetworkClient* client, int uid,
-                                    const nlohmann::json& req) {
+void BusinessLogic::handleSubscribe(INetworkClient* client, int uid, const nlohmann::json& req) {
     int rid = req.value("routeId",-1);
-    if (!m_store.findRouteById(rid)) {
-        client->sendMessage(makeError("Route not found")); return;
-    }
-    if (!m_store.subscribe(uid, rid)) {
-        client->sendMessage(makeError("Already subscribed")); return;
-    }
+    if (!m_store.findRouteById(rid)) { client->sendMessage(makeError("Not found")); return; }
+    if (!m_store.subscribe(uid, rid)) { client->sendMessage(makeError("Already subscribed")); return; }
     client->sendMessage(makeOk("Subscribed"));
 }
 
-void BusinessLogic::handleUnsubscribe(INetworkClient* client, int uid,
-                                      const nlohmann::json& req) {
-    if (!m_store.unsubscribe(uid, req.value("routeId",-1))) {
-        client->sendMessage(makeError("Not subscribed")); return;
-    }
+void BusinessLogic::handleUnsubscribe(INetworkClient* client, int uid, const nlohmann::json& req) {
+    if (!m_store.unsubscribe(uid, req.value("routeId",-1))) { client->sendMessage(makeError("Not subscribed")); return; }
     client->sendMessage(makeOk("Unsubscribed"));
 }
 
@@ -182,32 +131,20 @@ void BusinessLogic::handleGetSubs(INetworkClient* client, int uid) {
         auto r = m_store.findRouteById(rid);
         if (r) arr.push_back(r->toJson());
     }
-    nlohmann::json reply;
-    reply["type"]          = MSG_SUBS_LIST;
-    reply["subscriptions"] = arr;
+    nlohmann::json reply; reply["type"] = MSG_SUBS_LIST; reply["subscriptions"] = arr;
     client->sendMessage(reply);
 }
 
-void BusinessLogic::handleRide(INetworkClient* client, int uid,
-                               const nlohmann::json& req) {
+void BusinessLogic::handleRide(INetworkClient* client, int uid, const nlohmann::json& req) {
     int rid = req.value("routeId",-1);
-    if (!m_store.findRouteById(rid)) {
-        client->sendMessage(makeError("Route not found")); return;
-    }
-    nlohmann::json reply;
-    reply["type"]    = MSG_TICKETS;
-    reply["routeId"] = rid;
+    if (!m_store.findRouteById(rid)) { client->sendMessage(makeError("Not found")); return; }
+    nlohmann::json reply; reply["type"] = MSG_TICKETS; reply["routeId"] = rid;
     if (m_store.isSubscribed(uid, rid)) {
-        reply["ticketIssued"] = false;
-        reply["message"]      = "Ride recorded. Valid subscription.";
+        reply["ticketIssued"] = false; reply["message"] = "Ride recorded. Valid subscription.";
     } else {
-	bool isSub = m_store.isSubscribed(uid, rid);
-	int ticketPrice = isSub ? 0 : 120;
-
-	int tid = m_store.issueTicket(uid, rid, currentTimestamp(), !isSub, ticketPrice);
-        reply["ticketIssued"] = true;
-        reply["ticketId"]     = tid;
-        reply["message"]      = "No subscription. Ticket #" + std::to_string(tid) + " issued.";
+        int tid = m_store.issueTicket(uid, rid, currentTimestamp(), true, 120);
+        reply["ticketIssued"] = true; reply["ticketId"] = tid;
+        reply["message"] = "No subscription. Ticket #" + std::to_string(tid) + " issued.";
     }
     client->sendMessage(reply);
 }
@@ -215,53 +152,56 @@ void BusinessLogic::handleRide(INetworkClient* client, int uid,
 void BusinessLogic::handleGetTickets(INetworkClient* client, int uid) {
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& t : m_store.getTicketsForUser(uid)) arr.push_back(t.toJson());
-    nlohmann::json reply;
-    reply["type"]    = MSG_TICKETS;
-    reply["tickets"] = arr;
+    nlohmann::json reply; reply["type"] = MSG_TICKETS; reply["tickets"] = arr;
     client->sendMessage(reply);
 }
 
-void BusinessLogic::handleSetFreetime(INetworkClient* client, int uid,
-                                      const nlohmann::json& req) {
-    if (!req.contains("slots") || !req["slots"].is_array()) {
-        client->sendMessage(makeError("Expected 'slots' array")); return;
+void BusinessLogic::handleSetVotes(INetworkClient* client, int uid, const nlohmann::json& req) {
+    if (!req.contains("votes") || !req["votes"].is_array()) { client->sendMessage(makeError("Expected 'votes' array")); return; }
+    std::vector<RouteVote> votes;
+    for (const auto& s : req["votes"]) {
+        RouteVote v;
+        v.userId    = uid;
+        v.routeId   = s.value("routeId", 0);
+        v.day       = s.value("day", "");
+        v.timeSlot  = s.value("timeSlot", "");
+        v.direction = s.value("direction", "");
+        votes.push_back(v);
     }
-    std::vector<FreeSlot> slots;
-    for (const auto& s : req["slots"]) {
-        FreeSlot fs;
-        fs.userId    = uid;
-        fs.day       = s.value("day","");
-        fs.startTime = s.value("startTime","");
-        fs.endTime   = s.value("endTime","");
-        if (fs.day.empty()) {
-            client->sendMessage(makeError("Slot missing day")); return;
-        }
-        slots.push_back(fs);
-    }
-    m_store.setFreeSlots(uid, slots);
-    client->sendMessage(makeOk("Free time saved"));
+    m_store.setVotes(uid, votes);
+    client->sendMessage(makeOk("Votes saved"));
 }
 
-void BusinessLogic::handleGetFreetime(INetworkClient* client, int uid) {
+void BusinessLogic::handleGetVotes(INetworkClient* client, int uid) {
     nlohmann::json arr = nlohmann::json::array();
-    for (const auto& fs : m_store.getFreeSlots(uid)) arr.push_back(fs.toJson());
-    nlohmann::json reply;
-    reply["type"]  = MSG_FREETIME;
-    reply["slots"] = arr;
+    for (const auto& v : m_store.getVotes(uid)) arr.push_back(v.toJson());
+    nlohmann::json reply; reply["type"] = MSG_VOTES_LIST; reply["votes"] = arr;
     client->sendMessage(reply);
 }
 
 void BusinessLogic::handleGetUsers(INetworkClient* client, int uid) {
     auto u = m_store.findUserById(uid);
-    if (!u || u->role != ROLE_ADMIN) {
-        client->sendMessage(makeError("Admins only")); return;
-    }
+    if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& usr : m_store.getAllUsers()) arr.push_back(usr.toPublicJson());
-    nlohmann::json reply;
-    reply["type"]  = MSG_USERS_LIST;
-    reply["users"] = arr;
+    nlohmann::json reply; reply["type"] = MSG_USERS_LIST; reply["users"] = arr;
     client->sendMessage(reply);
+}
+
+void BusinessLogic::handleGetDemand(INetworkClient* client, int uid) {
+    auto u = m_store.findUserById(uid);
+    if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
+    nlohmann::json reply;
+    reply["type"]   = MSG_DEMAND_LIST;
+    reply["demand"] = m_store.getAggregatedDemand();
+    client->sendMessage(reply);
+}
+
+void BusinessLogic::handleDispatchBus(INetworkClient* client, int uid, const nlohmann::json& req) {
+    auto u = m_store.findUserById(uid);
+    if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
+    m_store.fulfillDispatch(req.value("routeId", 0), req.value("day", ""), req.value("timeSlot", ""), req.value("direction", ""));
+    client->sendMessage(makeOk("Bus Dispatched! Votes cleared for this specific slot."));
 }
 
 } // namespace bus
