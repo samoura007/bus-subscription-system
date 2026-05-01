@@ -1,12 +1,12 @@
 #include "DataStore.h"
 #include <map>
+#include <tuple>
 
 namespace bus {
 
 DataStore::DataStore() { seedData(); }
 
 void DataStore::seedData() {
-    // Admin password is "admin123" (SHA-256 hash)
     addUser("admin",
             "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
             "admin");
@@ -21,9 +21,7 @@ void DataStore::seedData() {
              "8:00, 10:00, 15:00, 19:00");
 }
 
-bool DataStore::addUser(const std::string& username,
-                        const std::string& passwordHash,
-                        const std::string& role) {
+bool DataStore::addUser(const std::string& username, const std::string& passwordHash, const std::string& role) {
     std::lock_guard<std::mutex> lock(m_mutex);
     for (const auto& u : m_users) {
         if (u.username == username) return false;
@@ -58,9 +56,7 @@ std::vector<User> DataStore::getAllUsers() const {
     return m_users;
 }
 
-int DataStore::addRoute(const std::string& name,
-                        const std::string& stops,
-                        const std::string& schedule) {
+int DataStore::addRoute(const std::string& name, const std::string& stops, const std::string& schedule) {
     std::lock_guard<std::mutex> lock(m_mutex);
     Route r;
     r.id       = m_nextRouteId++;
@@ -154,42 +150,75 @@ std::vector<Ticket> DataStore::getTicketsForUser(int userId) const {
     return result;
 }
 
-void DataStore::setFreeSlots(int userId, const std::vector<FreeSlot>& slots) {
+void DataStore::setVotes(int userId, const std::vector<RouteVote>& votes) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_freeSlots.erase(
-        std::remove_if(m_freeSlots.begin(), m_freeSlots.end(),
-                       [userId](const FreeSlot& fs){ return fs.userId == userId; }),
-        m_freeSlots.end());
-    for (const auto& s : slots) {
-        m_freeSlots.push_back(s);
+    m_votes.erase(
+        std::remove_if(m_votes.begin(), m_votes.end(),
+                       [userId](const RouteVote& v){ return v.userId == userId; }),
+        m_votes.end());
+    for (const auto& v : votes) {
+        m_votes.push_back(v);
     }
 }
 
-std::vector<FreeSlot> DataStore::getFreeSlots(int userId) const {
+std::vector<RouteVote> DataStore::getVotes(int userId) const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::vector<FreeSlot> result;
-    for (const auto& fs : m_freeSlots) {
-        if (fs.userId == userId) result.push_back(fs);
+    std::vector<RouteVote> result;
+    for (const auto& v : m_votes) {
+        if (v.userId == userId) result.push_back(v);
     }
     return result;
 }
 
-std::vector<std::pair<std::string, int>> DataStore::getAvailability(int routeId) const {
+nlohmann::json DataStore::getAggregatedDemand() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::vector<int> subs;
-    for (const auto& s : m_subscriptions) {
-        if (s.second == routeId) subs.push_back(s.first);
+    std::map<std::tuple<int, std::string, std::string, std::string>, int> counts;
+    for (const auto& v : m_votes) {
+        counts[{v.routeId, v.day, v.timeSlot, v.direction}]++;
     }
-    std::map<std::string, int> counts;
-    for (const auto& fs : m_freeSlots) {
-        bool found = false;
-        for (int uid : subs) { if (uid == fs.userId) { found = true; break; } }
-        if (found) {
-            std::string key = fs.day + " " + fs.startTime + "-" + fs.endTime;
-            counts[key]++;
+
+    std::map<int, std::pair<std::tuple<std::string, std::string, std::string>, int>> max_per_route;
+    for (const auto& kv : counts) {
+        int rid = std::get<0>(kv.first);
+        int count = kv.second;
+        if (max_per_route.find(rid) == max_per_route.end() || count > max_per_route[rid].second) {
+            max_per_route[rid] = {{std::get<1>(kv.first), std::get<2>(kv.first), std::get<3>(kv.first)}, count};
         }
     }
-    return std::vector<std::pair<std::string,int>>(counts.begin(), counts.end());
+
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& kv : max_per_route) {
+        int count = kv.second.second;
+        std::string busType;
+        if (count <= 47) busType = "Mid-size Coach (36-47 passengers)";
+        else if (count <= 56) busType = "Standard Motorcoach (47-56 passengers)";
+        else if (count <= 60) busType = "Double-Axle Motorcoach (50-60 passengers)";
+        else busType = "High-Capacity Coach (56-90 passengers)";
+
+std::optional<Route> routeOpt = std::nullopt;
+        for (const auto& r : m_routes) { if (r.id == kv.first) { routeOpt = r; break; } }
+        std::string rname = routeOpt ? routeOpt->name : "Unknown";
+
+        nlohmann::json j;
+        j["routeId"]   = kv.first;
+        j["routeName"] = rname;
+        j["day"]       = std::get<0>(kv.second.first);
+        j["timeSlot"]  = std::get<1>(kv.second.first);
+        j["direction"] = std::get<2>(kv.second.first);
+        j["votes"]     = count;
+        j["busType"]   = busType;
+        arr.push_back(j);
+    }
+    return arr;
+}
+
+void DataStore::fulfillDispatch(int routeId, const std::string& day, const std::string& timeSlot, const std::string& direction) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_votes.erase(
+        std::remove_if(m_votes.begin(), m_votes.end(), [&](const RouteVote& v) {
+            return v.routeId == routeId && v.day == day && v.timeSlot == timeSlot && v.direction == direction;
+        }),
+        m_votes.end());
 }
 
 } // namespace bus

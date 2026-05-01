@@ -30,9 +30,13 @@ private:
     void handleGetSubs     (INetworkClient* c, int uid);
     void handleRide        (INetworkClient* c, int uid, const nlohmann::json& req);
     void handleGetTickets  (INetworkClient* c, int uid);
-    void handleSetFreetime (INetworkClient* c, int uid, const nlohmann::json& req);
-    void handleGetFreetime (INetworkClient* c, int uid);
     void handleGetUsers    (INetworkClient* c, int uid);
+    
+    // New Voting & Dispatch
+    void handleSetVotes    (INetworkClient* c, int uid, const nlohmann::json& req);
+    void handleGetVotes    (INetworkClient* c, int uid);
+    void handleGetDemand   (INetworkClient* c, int uid);
+    void handleDispatchBus (INetworkClient* c, int uid, const nlohmann::json& req);
 
     static nlohmann::json makeError(const std::string& msg);
     static nlohmann::json makeOk   (const std::string& msg = "");

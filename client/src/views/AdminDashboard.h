@@ -24,6 +24,7 @@ signals:
 private slots:
     void onAddRouteClicked();
     void onDeleteRouteClicked();
+    void onDispatchBusClicked();
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
 
@@ -33,9 +34,9 @@ private:
 
     NetworkManager* m_net;
     int             m_userId;
-
     QListWidget* m_routesList;
     QListWidget* m_usersList;
+    QListWidget* m_demandList;
     QLineEdit*   m_routeNameEdit;
     QLineEdit*   m_routeStopsEdit;
     QLineEdit*   m_routeScheduleEdit;

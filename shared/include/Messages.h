@@ -26,10 +26,13 @@ inline constexpr const char* MSG_RIDE        = "RIDE";
 inline constexpr const char* MSG_GET_TICKETS = "GET_TICKETS";
 inline constexpr const char* MSG_TICKETS     = "TICKETS";
 
-// Free Time
-inline constexpr const char* MSG_SET_FREETIME = "SET_FREETIME";
-inline constexpr const char* MSG_GET_FREETIME = "GET_FREETIME";
-inline constexpr const char* MSG_FREETIME     = "FREETIME";
+// Votes & Dispatch
+inline constexpr const char* MSG_SET_VOTES    = "SET_VOTES";
+inline constexpr const char* MSG_GET_VOTES    = "GET_VOTES";
+inline constexpr const char* MSG_VOTES_LIST   = "VOTES_LIST";
+inline constexpr const char* MSG_GET_DEMAND   = "GET_DEMAND";
+inline constexpr const char* MSG_DEMAND_LIST  = "DEMAND_LIST";
+inline constexpr const char* MSG_DISPATCH_BUS = "DISPATCH_BUS";
 
 // Admin
 inline constexpr const char* MSG_GET_USERS  = "GET_USERS";

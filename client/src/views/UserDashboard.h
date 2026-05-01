@@ -4,9 +4,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTabWidget>
-#include <QCheckBox>
-#include <QTimeEdit>
-#include <QVector>
+#include <QComboBox>
+#include <map>
 #include "../network/NetworkManager.h"
 
 namespace bus {
@@ -27,7 +26,9 @@ private slots:
     void onSubscribeClicked();
     void onUnsubscribeClicked();
     void onBookRideClicked();
-    void onSaveFreeTimeClicked();
+    void onAddVoteClicked();
+    void onSaveVotesClicked();
+    void onRouteSelectionChanged(int index);
     void onRefreshClicked();
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
@@ -38,16 +39,20 @@ private:
 
     NetworkManager* m_net;
     int             m_userId;
-
     QListWidget* m_routesList;
     QListWidget* m_subsList;
     QListWidget* m_ticketsList;
     QLabel*      m_statusLabel;
 
-    // Free Time tab widgets (parallel vectors, one per weekday)
-    QVector<QCheckBox*> m_dayChecks;
-    QVector<QTimeEdit*> m_startEdits;
-    QVector<QTimeEdit*> m_endEdits;
+    // Vote tab widgets
+    QComboBox*   m_voteRouteBox;
+    QComboBox*   m_voteDayBox;
+    QComboBox*   m_voteDirBox;
+    QComboBox*   m_voteTimeBox;
+    QListWidget* m_myVotesList;
+    
+    // Store schedules to populate time combobox
+    std::map<int, QString> m_routeSchedules;
 };
 
 } // namespace bus

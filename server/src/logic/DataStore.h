@@ -33,9 +33,11 @@ public:
     int issueTicket(int userId, int routeId, const std::string& timestamp, bool charged, int price);
     std::vector<Ticket> getTicketsForUser(int userId) const;
 
-    void setFreeSlots(int userId, const std::vector<FreeSlot>& slots);
-    std::vector<FreeSlot> getFreeSlots(int userId) const;
-    std::vector<std::pair<std::string, int>> getAvailability(int routeId) const;
+    void setVotes(int userId, const std::vector<RouteVote>& votes);
+    std::vector<RouteVote> getVotes(int userId) const;
+    
+    nlohmann::json getAggregatedDemand() const;
+    void fulfillDispatch(int routeId, const std::string& day, const std::string& timeSlot, const std::string& direction);
 
 private:
     mutable std::mutex m_mutex;
@@ -43,10 +45,12 @@ private:
     std::vector<Route>  m_routes;
     std::vector<std::pair<int,int>> m_subscriptions;
     std::vector<Ticket> m_tickets;
-    std::vector<FreeSlot> m_freeSlots;
+    std::vector<RouteVote> m_votes;
+
     int m_nextUserId   = 1;
     int m_nextRouteId  = 1;
     int m_nextTicketId = 1;
+
     void seedData();
 };
 
