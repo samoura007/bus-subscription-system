@@ -27,6 +27,8 @@ private slots:
     void onDispatchBusClicked();
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
+    void onUserSelected(QListWidgetItem* item);
+    void onMessageUserDetail(const nlohmann::json& msg);
 
 private:
     void buildUI();
@@ -41,6 +43,13 @@ private:
     QLineEdit*   m_routeStopsEdit;
     QLineEdit*   m_routeScheduleEdit;
     QLabel*      m_statusLabel;
+    QTabWidget*  m_tabs                  = nullptr;
+
+    QListWidget* m_userDetailSubsList    = nullptr;
+    QListWidget* m_userDetailTicketsList = nullptr;
+    QListWidget* m_userDetailFreeTime    = nullptr;
+    QLabel*      m_userDetailNameLabel   = nullptr;
+    int          m_selectedUserId        = -1;
 };
 
 } // namespace bus

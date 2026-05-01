@@ -36,7 +36,8 @@ private:
     void handleSetVotes    (INetworkClient* c, int uid, const nlohmann::json& req);
     void handleGetVotes    (INetworkClient* c, int uid);
     void handleGetDemand   (INetworkClient* c, int uid);
-    void handleDispatchBus (INetworkClient* c, int uid, const nlohmann::json& req);
+    void handleDispatchBus  (INetworkClient* c, int uid, const nlohmann::json& req);
+    void handleGetUserDetail(INetworkClient* c, int uid, const nlohmann::json& req);
 
     static nlohmann::json makeError(const std::string& msg);
     static nlohmann::json makeOk   (const std::string& msg = "");
