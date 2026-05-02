@@ -13,6 +13,8 @@ target_link_libraries(bus_server PRIVATE
     bus_shared
     Boost::system
     OpenSSL::Crypto
-    ws2_32
-    mswsock
 )
+
+if(WIN32)
+    target_link_libraries(bus_server PRIVATE ws2_32 mswsock)
+endif()

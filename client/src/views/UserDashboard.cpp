@@ -7,7 +7,6 @@
 namespace bus {
 
 static const QStringList WEEKDAYS = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"};
-static const QStringList DIRECTIONS = {"To Uni", "From Uni"};
 
 UserDashboard::UserDashboard(NetworkManager* net, int userId, const QString& username, QWidget* parent)
     : QWidget(parent), m_net(net), m_userId(userId)
@@ -66,7 +65,7 @@ void UserDashboard::buildUI() {
     ticketsL->addWidget(m_ticketsList);
     tabs->addTab(ticketsW, "Tickets");
 
-    // ---- Vote Timings tab ----
+    // ---- Request a Slot tab ----
     auto* voteW = new QWidget;
     auto* voteL = new QVBoxLayout(voteW);
     auto* form  = new QFormLayout;
@@ -74,31 +73,30 @@ void UserDashboard::buildUI() {
     m_voteRouteBox = new QComboBox;
     m_voteDayBox   = new QComboBox;
     m_voteDayBox->addItems(WEEKDAYS);
-    m_voteDirBox   = new QComboBox;
-    m_voteDirBox->addItems(DIRECTIONS);
+    m_voteDestBox  = new QComboBox;
     m_voteTimeBox  = new QComboBox;
     
     form->addRow("Subscribed Route:", m_voteRouteBox);
     form->addRow("Day:", m_voteDayBox);
-    form->addRow("Direction:", m_voteDirBox);
+    form->addRow("Destination:", m_voteDestBox);
     form->addRow("Time Slot:", m_voteTimeBox);
     
     connect(m_voteRouteBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &UserDashboard::onRouteSelectionChanged);
     
-    auto* addVoteBtn = new QPushButton("Add to My Votes");
+    auto* addVoteBtn = new QPushButton("Add to My Time Slot Requests");
     m_myVotesList = new QListWidget;
-    auto* saveVotesBtn = new QPushButton("Commit All Votes to Server");
+    auto* saveVotesBtn = new QPushButton("Submit Time Slot Requests");
     
     voteL->addLayout(form);
     voteL->addWidget(addVoteBtn);
-    voteL->addWidget(new QLabel("My Prepared Votes:"));
+    voteL->addWidget(new QLabel("Time Slot Request List:"));
     voteL->addWidget(m_myVotesList);
     voteL->addWidget(saveVotesBtn);
     
     connect(addVoteBtn, &QPushButton::clicked, this, &UserDashboard::onAddVoteClicked);
     connect(saveVotesBtn, &QPushButton::clicked, this, &UserDashboard::onSaveVotesClicked);
     
-    tabs->addTab(voteW, "Vote Timings");
+    tabs->addTab(voteW, "Request a Slot");
     root->addWidget(tabs);
 
     m_statusLabel = new QLabel;
@@ -138,18 +136,41 @@ void UserDashboard::onBookRideClicked() {
 
 void UserDashboard::onRouteSelectionChanged(int index) {
     m_voteTimeBox->clear();
+    m_voteDestBox->clear();
+    
     if (index < 0) return;
+    
     int routeId = m_voteRouteBox->itemData(index).toInt();
+    
+    // 1. Populate the valid time slots
     QString sched = m_routeSchedules[routeId];
     for (const QString& t : sched.split(",", Qt::SkipEmptyParts)) {
         m_voteTimeBox->addItem(t.trimmed());
     }
+    
+    // 2. Parse the Route Name to dynamically generate the Destinations
+    QString routeName = m_voteRouteBox->itemText(index);
+    QString otherDestination = routeName;
+    
+    // Assuming routes are named like "AUC -> Nasr City"
+    int arrowIdx = routeName.indexOf("->");
+    if (arrowIdx != -1) {
+        otherDestination = routeName.mid(arrowIdx + 2).trimmed(); // Extract "Nasr City"
+    } else {
+        // Fallback if the route name doesn't contain "->"
+        otherDestination.replace("AUC", "", Qt::CaseInsensitive);
+        otherDestination = otherDestination.trimmed();
+        if (otherDestination.isEmpty()) otherDestination = "Other Stop";
+    }
+    
+    m_voteDestBox->addItem("University");
+    m_voteDestBox->addItem(otherDestination);
 }
 
 void UserDashboard::onAddVoteClicked() {
     if (m_voteRouteBox->count() == 0 || m_voteTimeBox->count() == 0) return;
     int routeId = m_voteRouteBox->currentData().toInt();
-    QString text = m_voteRouteBox->currentText() + " | " + m_voteDayBox->currentText() + " | " + m_voteDirBox->currentText() + " | " + m_voteTimeBox->currentText();
+    QString text = m_voteRouteBox->currentText() + " | " + m_voteDayBox->currentText() + " | " + m_voteDestBox->currentText() + " | " + m_voteTimeBox->currentText();
     
     // Check duplicates
     for(int i = 0; i < m_myVotesList->count(); i++) {
@@ -160,7 +181,7 @@ void UserDashboard::onAddVoteClicked() {
     item->setData(Qt::UserRole, routeId);
     item->setData(Qt::UserRole + 1, m_voteDayBox->currentText());
     item->setData(Qt::UserRole + 2, m_voteTimeBox->currentText());
-    item->setData(Qt::UserRole + 3, m_voteDirBox->currentText());
+    item->setData(Qt::UserRole + 3, m_voteDestBox->currentText());
     m_myVotesList->addItem(item);
 }
 
@@ -172,7 +193,11 @@ void UserDashboard::onSaveVotesClicked() {
         vote["routeId"]   = item->data(Qt::UserRole).toInt();
         vote["day"]       = item->data(Qt::UserRole + 1).toString().toStdString();
         vote["timeSlot"]  = item->data(Qt::UserRole + 2).toString().toStdString();
-        vote["direction"] = item->data(Qt::UserRole + 3).toString().toStdString();
+        
+        // We keep the JSON key as "direction" to ensure compatibility with the Server 
+        // without needing to rewrite backend Models/Database structs.
+        vote["direction"] = item->data(Qt::UserRole + 3).toString().toStdString(); 
+        
         votesArray.push_back(vote);
     }
     nlohmann::json req; req["type"] = MSG_SET_VOTES; req["votes"] = votesArray;
@@ -222,7 +247,7 @@ void UserDashboard::onMessageReceived(const nlohmann::json& msg) {
             int routeId = v.value("routeId", 0);
             QString day = QString::fromStdString(v.value("day",""));
             QString timeSlot = QString::fromStdString(v.value("timeSlot",""));
-            QString dir = QString::fromStdString(v.value("direction",""));
+            QString dir = QString::fromStdString(v.value("direction","")); // Contains "University" or "Nasr City"
             QString text = "Route " + QString::number(routeId) + " | " + day + " | " + dir + " | " + timeSlot;
             auto* item = new QListWidgetItem(text);
             item->setData(Qt::UserRole, routeId);

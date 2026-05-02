@@ -42,13 +42,13 @@ private:
     QListWidget* m_routesList;
     QListWidget* m_subsList;
     QListWidget* m_ticketsList;
-    QLabel*      m_statusLabel;
+    QLabel* m_statusLabel;
 
-    // Vote tab widgets
-    QComboBox*   m_voteRouteBox;
-    QComboBox*   m_voteDayBox;
-    QComboBox*   m_voteDirBox;
-    QComboBox*   m_voteTimeBox;
+    // Time Slot Request tab widgets
+    QComboBox* m_voteRouteBox;
+    QComboBox* m_voteDayBox;
+    QComboBox* m_voteDestBox; // Renamed from m_voteDirBox
+    QComboBox* m_voteTimeBox;
     QListWidget* m_myVotesList;
     
     // Store schedules to populate time combobox
