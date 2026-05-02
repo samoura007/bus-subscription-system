@@ -65,7 +65,8 @@ void BusinessLogic::handleMessage(INetworkClient* client, int& sessionUserId, co
     else if (type == MSG_SET_VOTES)    handleSetVotes   (client, sessionUserId, req);
     else if (type == MSG_GET_VOTES)    handleGetVotes   (client, sessionUserId);
     else if (type == MSG_GET_DEMAND)   handleGetDemand  (client, sessionUserId);
-    else if (type == MSG_DISPATCH_BUS) handleDispatchBus(client, sessionUserId, req);
+    else if (type == MSG_DISPATCH_BUS)    handleDispatchBus   (client, sessionUserId, req);
+    else if (type == MSG_GET_USER_DETAIL) handleGetUserDetail (client, sessionUserId, req);
     else client->sendMessage(makeError("Unknown message type: " + type));
 }
 
@@ -202,6 +203,46 @@ void BusinessLogic::handleDispatchBus(INetworkClient* client, int uid, const nlo
     if (!u || u->role != ROLE_ADMIN) { client->sendMessage(makeError("Admins only")); return; }
     m_store.fulfillDispatch(req.value("routeId", 0), req.value("day", ""), req.value("timeSlot", ""), req.value("direction", ""));
     client->sendMessage(makeOk("Bus Dispatched! Votes cleared for this specific slot."));
+}
+
+void BusinessLogic::handleGetUserDetail(INetworkClient* client, int adminId, const nlohmann::json& req) {
+    auto admin = m_store.findUserById(adminId);
+    if (!admin || admin->role != ROLE_ADMIN) {
+        client->sendMessage(makeError("Admins only"));
+        return;
+    }
+
+    int targetUserId = req.value("userId", -1);
+    auto targetUser  = m_store.findUserById(targetUserId);
+    if (!targetUser) {
+        client->sendMessage(makeError("User not found"));
+        return;
+    }
+
+    // Subscribed routes
+    nlohmann::json subsArr = nlohmann::json::array();
+    for (int rid : m_store.getSubscribedRouteIds(targetUserId)) {
+        auto r = m_store.findRouteById(rid);
+        if (r) subsArr.push_back(r->toJson());
+    }
+
+    // Tickets
+    nlohmann::json ticketsArr = nlohmann::json::array();
+    for (const auto& t : m_store.getTicketsForUser(targetUserId))
+        ticketsArr.push_back(t.toJson());
+
+    // Free time (user's voted preferred time slots)
+    nlohmann::json votesArr = nlohmann::json::array();
+    for (const auto& v : m_store.getVotes(targetUserId))
+        votesArr.push_back(v.toJson());
+
+    nlohmann::json reply;
+    reply["type"]          = MSG_USER_DETAIL;
+    reply["user"]          = targetUser->toPublicJson();
+    reply["subscriptions"] = subsArr;
+    reply["tickets"]       = ticketsArr;
+    reply["freeTime"]      = votesArr;
+    client->sendMessage(reply);
 }
 
 } // namespace bus

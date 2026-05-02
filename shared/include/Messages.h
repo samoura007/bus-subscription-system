@@ -37,7 +37,8 @@ inline constexpr const char* MSG_DISPATCH_BUS = "DISPATCH_BUS";
 // Admin
 inline constexpr const char* MSG_GET_USERS  = "GET_USERS";
 inline constexpr const char* MSG_USERS_LIST = "USERS_LIST";
-
+inline constexpr const char* MSG_GET_USER_DETAIL = "get_user_detail";
+inline constexpr const char* MSG_USER_DETAIL     = "user_detail";
 // Generic
 inline constexpr const char* MSG_OK    = "OK";
 inline constexpr const char* MSG_ERROR = "ERROR";
