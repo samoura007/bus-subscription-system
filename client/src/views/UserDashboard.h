@@ -5,7 +5,8 @@
 #include <QLabel>
 #include <QTabWidget>
 #include <QComboBox>
-#include <map>
+#include <vector>
+#include <nlohmann/json.hpp>
 #include "../network/NetworkManager.h"
 
 namespace bus {
@@ -13,10 +14,7 @@ namespace bus {
 class UserDashboard : public QWidget {
     Q_OBJECT
 public:
-    explicit UserDashboard(NetworkManager* net,
-                           int userId,
-                           const QString& username,
-                           QWidget* parent = nullptr);
+    explicit UserDashboard(NetworkManager* net, int userId, const QString& username, QWidget* parent = nullptr);
     void refresh();
 
 signals:
@@ -26,10 +24,9 @@ private slots:
     void onSubscribeClicked();
     void onUnsubscribeClicked();
     void onBookRideClicked();
-    void onAddVoteClicked();
-    void onSaveVotesClicked();
-    void onRouteSelectionChanged(int index);
-    void onRefreshClicked();
+    void onAddRequestClicked();
+    void onDeleteRequestClicked();
+    void onReqRouteSelectionChanged(); // NEW: Slot to update Destination combobox
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
 
@@ -43,16 +40,15 @@ private:
     QListWidget* m_subsList;
     QListWidget* m_ticketsList;
     QLabel* m_statusLabel;
+    QTabWidget* m_tabs;
 
-    // Time Slot Request tab widgets
-    QComboBox* m_voteRouteBox;
-    QComboBox* m_voteDayBox;
-    QComboBox* m_voteDestBox; // Renamed from m_voteDirBox
-    QComboBox* m_voteTimeBox;
-    QListWidget* m_myVotesList;
-    
-    // Store schedules to populate time combobox
-    std::map<int, QString> m_routeSchedules;
+    // Time Slot Requests
+    QComboBox* m_reqRouteBox;
+    QComboBox* m_reqDayBox;
+    QComboBox* m_reqTimeBox;
+    QComboBox* m_reqDestBox; // CHANGED: Replaced DirBox with DestBox
+    QListWidget* m_myRequestsList;
+    std::vector<nlohmann::json> m_myVotes;
 };
 
 } // namespace bus

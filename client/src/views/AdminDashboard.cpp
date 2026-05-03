@@ -40,10 +40,8 @@ void AdminDashboard::buildUI() {
     auto* form    = new QFormLayout;
     m_routeNameEdit     = new QLineEdit;
     m_routeStopsEdit    = new QLineEdit;
-    m_routeScheduleEdit = new QLineEdit;
     form->addRow("Route Name:", m_routeNameEdit);
     form->addRow("Stops:",      m_routeStopsEdit);
-    form->addRow("Schedule:",   m_routeScheduleEdit);
     auto* addBtn = new QPushButton("Add Route");
     auto* delBtn = new QPushButton("Delete Selected Route");
     routesL->addWidget(new QLabel("Existing Routes:"));
@@ -55,16 +53,46 @@ void AdminDashboard::buildUI() {
     connect(delBtn, &QPushButton::clicked, this, &AdminDashboard::onDeleteRouteClicked);
     tabs->addTab(routesW, "Manage Routes");
 
-    // ---- Bus Dispatch / Demand tab ----
-    auto* demandW = new QWidget;
-    auto* demandL = new QVBoxLayout(demandW);
-    m_demandList  = new QListWidget;
-    auto* dispatchBtn = new QPushButton("Dispatch Bus for Selected Demand");
-    demandL->addWidget(new QLabel("Highest Voted Slots (System Suggested Buses):"));
+    // ---- Manage Schedules & View Demand tab ----
+    auto* scheduleW = new QWidget;
+    auto* scheduleSplit = new QSplitter(Qt::Horizontal, scheduleW);
+    auto* schedMainL = new QVBoxLayout(scheduleW);
+    schedMainL->addWidget(scheduleSplit);
+
+    auto* editorGroup = new QGroupBox("Schedule Editor");
+    auto* scheduleL = new QVBoxLayout(editorGroup);
+    m_scheduleRouteBox = new QComboBox;
+    m_tripsList = new QListWidget;
+    auto* tripForm = new QFormLayout;
+    m_addTripTimeEdit = new QLineEdit;
+    m_addTripTimeEdit->setPlaceholderText("e.g. 05:00 PM");
+    m_addTripDestEdit = new QLineEdit;
+    m_addTripDestEdit->setPlaceholderText("e.g. Nasr City");
+    tripForm->addRow("Time:", m_addTripTimeEdit);
+    tripForm->addRow("Destination:", m_addTripDestEdit);
+    auto* addTripBtn = new QPushButton("Add Trip");
+    auto* delTripBtn = new QPushButton("Delete Selected Trip");
+
+    scheduleL->addWidget(new QLabel("Select Route:"));
+    scheduleL->addWidget(m_scheduleRouteBox);
+    scheduleL->addWidget(new QLabel("Schedule (Trips):"));
+    scheduleL->addWidget(m_tripsList);
+    scheduleL->addLayout(tripForm);
+    scheduleL->addWidget(addTripBtn);
+    scheduleL->addWidget(delTripBtn);
+
+    auto* demandGroup = new QGroupBox("Aggregated User Requests");
+    auto* demandL = new QVBoxLayout(demandGroup);
+    m_demandList = new QListWidget;
     demandL->addWidget(m_demandList);
-    demandL->addWidget(dispatchBtn);
-    connect(dispatchBtn, &QPushButton::clicked, this, &AdminDashboard::onDispatchBusClicked);
-    tabs->addTab(demandW, "Bus Dispatch");
+
+    scheduleSplit->addWidget(editorGroup);
+    scheduleSplit->addWidget(demandGroup);
+
+    connect(m_scheduleRouteBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &AdminDashboard::onRouteSelectionChanged);
+    connect(addTripBtn, &QPushButton::clicked, this, &AdminDashboard::onAddTripClicked);
+    connect(delTripBtn, &QPushButton::clicked, this, &AdminDashboard::onDeleteTripClicked);
+    tabs->addTab(scheduleW, "Manage Schedules");
 
     // ---- All Users tab ----
     auto* usersW     = new QWidget;
@@ -80,8 +108,7 @@ void AdminDashboard::buildUI() {
         auto* item = m_usersList->currentItem();
         if (item) onUserSelected(item);
     });
-    connect(m_usersList, &QListWidget::itemDoubleClicked,
-            this, &AdminDashboard::onUserSelected);
+    connect(m_usersList, &QListWidget::itemDoubleClicked, this, &AdminDashboard::onUserSelected);
 
     // ---- User Detail tab ----
     auto* detailW = new QWidget;
@@ -106,12 +133,6 @@ void AdminDashboard::buildUI() {
     ticketsGroupL->addWidget(m_userDetailTicketsList);
     splitter->addWidget(ticketsGroup);
 
-    auto* freeGroup  = new QGroupBox("Preferred Free Time Slots (Votes)");
-    auto* freeGroupL = new QVBoxLayout(freeGroup);
-    m_userDetailFreeTime = new QListWidget;
-    freeGroupL->addWidget(m_userDetailFreeTime);
-    splitter->addWidget(freeGroup);
-
     detailL->addWidget(splitter);
     tabs->addTab(detailW, "User Detail");
 
@@ -134,9 +155,9 @@ void AdminDashboard::onAddRouteClicked() {
     req["type"]     = MSG_ADD_ROUTE;
     req["name"]     = m_routeNameEdit->text().toStdString();
     req["stops"]    = m_routeStopsEdit->text().toStdString();
-    req["schedule"] = m_routeScheduleEdit->text().toStdString();
+    req["schedule"] = ""; 
     m_net->sendRequest(req);
-    m_routeNameEdit->clear(); m_routeStopsEdit->clear(); m_routeScheduleEdit->clear();
+    m_routeNameEdit->clear(); m_routeStopsEdit->clear();
 }
 
 void AdminDashboard::onDeleteRouteClicked() {
@@ -146,27 +167,92 @@ void AdminDashboard::onDeleteRouteClicked() {
     m_net->sendRequest(req);
 }
 
-void AdminDashboard::onDispatchBusClicked() {
-    auto* item = m_demandList->currentItem();
-    if (!item) { showStatus("Select a demand slot to dispatch a bus for.", true); return; }
+void AdminDashboard::onRouteSelectionChanged() {
+    m_tripsList->clear();
+    int idx = m_scheduleRouteBox->currentIndex();
+    if (idx < 0) return;
+    int rid = m_scheduleRouteBox->itemData(idx).toInt();
+    if (m_routesData.count(rid)) {
+        auto arr = m_routesData[rid];
+        for (size_t i = 0; i < arr.size(); ++i) {
+            auto t = arr[i];
+            QString text = QString::fromStdString(t.value("time", "")) + " -> " + QString::fromStdString(t.value("destination", ""));
+            auto* item = new QListWidgetItem(text);
+            item->setData(Qt::UserRole, static_cast<int>(i));
+            m_tripsList->addItem(item);
+        }
+    }
+}
+
+void AdminDashboard::onAddTripClicked() {
+    int idx = m_scheduleRouteBox->currentIndex();
+    if (idx < 0) return;
+    int rid = m_scheduleRouteBox->itemData(idx).toInt();
+    
+    std::string t = m_addTripTimeEdit->text().toStdString();
+    std::string d = m_addTripDestEdit->text().toStdString();
+    if (t.empty() || d.empty()) { showStatus("Time and Destination required.", true); return; }
+    
+    nlohmann::json trip;
+    trip["time"] = t;
+    trip["destination"] = d;
+    m_routesData[rid].push_back(trip);
+    
     nlohmann::json req;
-    req["type"]      = MSG_DISPATCH_BUS;
-    req["routeId"]   = item->data(Qt::UserRole).toInt();
-    req["day"]       = item->data(Qt::UserRole + 1).toString().toStdString();
-    req["timeSlot"]  = item->data(Qt::UserRole + 2).toString().toStdString();
-    req["direction"] = item->data(Qt::UserRole + 3).toString().toStdString();
+    req["type"] = MSG_UPDATE_SCHEDULE;
+    req["routeId"] = rid;
+    req["schedule"] = m_routesData[rid].dump();
+    m_net->sendRequest(req);
+    
+    m_addTripTimeEdit->clear();
+    m_addTripDestEdit->clear();
+}
+
+void AdminDashboard::onDeleteTripClicked() {
+    auto* item = m_tripsList->currentItem();
+    if (!item) return;
+    int tripIdx = item->data(Qt::UserRole).toInt();
+    
+    int idx = m_scheduleRouteBox->currentIndex();
+    if (idx < 0) return;
+    int rid = m_scheduleRouteBox->itemData(idx).toInt();
+    
+    m_routesData[rid].erase(tripIdx);
+    
+    nlohmann::json req;
+    req["type"] = MSG_UPDATE_SCHEDULE;
+    req["routeId"] = rid;
+    req["schedule"] = m_routesData[rid].dump();
     m_net->sendRequest(req);
 }
 
 void AdminDashboard::onMessageReceived(const nlohmann::json& msg) {
     std::string type = msg.value("type", "");
+
     if (type == MSG_ROUTES_LIST) {
         m_routesList->clear();
+        m_scheduleRouteBox->blockSignals(true);
+        m_scheduleRouteBox->clear();
+        m_routesData.clear();
+        
         for (const auto& r : msg["routes"]) {
-            auto* item = new QListWidgetItem(QString::fromStdString(r["name"].get<std::string>()));
-            item->setData(Qt::UserRole, r["id"].get<int>());
+            int rid = r["id"].get<int>();
+            QString qname = QString::fromStdString(r["name"].get<std::string>());
+            
+            auto* item = new QListWidgetItem(qname);
+            item->setData(Qt::UserRole, rid);
             m_routesList->addItem(item);
+            
+            m_scheduleRouteBox->addItem(qname, rid);
+            std::string schedStr = r["schedule"].get<std::string>();
+            try {
+                m_routesData[rid] = nlohmann::json::parse(schedStr);
+            } catch(...) {
+                m_routesData[rid] = nlohmann::json::array();
+            }
         }
+        m_scheduleRouteBox->blockSignals(false);
+        onRouteSelectionChanged();
     } else if (type == MSG_USERS_LIST) {
         m_usersList->clear();
         for (const auto& u : msg["users"]) {
@@ -179,20 +265,21 @@ void AdminDashboard::onMessageReceived(const nlohmann::json& msg) {
     } else if (type == MSG_DEMAND_LIST) {
         m_demandList->clear();
         for (const auto& d : msg["demand"]) {
-            int routeId = d["routeId"].get<int>();
-            QString rName = QString::fromStdString(d["routeName"].get<std::string>());
-            QString day = QString::fromStdString(d["day"].get<std::string>());
-            QString time = QString::fromStdString(d["timeSlot"].get<std::string>());
-            QString dir = QString::fromStdString(d["direction"].get<std::string>());
-            int votes = d["votes"].get<int>();
-            QString bus = QString::fromStdString(d["busType"].get<std::string>());
-            QString text = QString("Route: %1 | %2 | %3 %4 | Votes: %5 -> Use: %6").arg(rName, day, dir, time, QString::number(votes), bus);
-            auto* item = new QListWidgetItem(text);
-            item->setData(Qt::UserRole, routeId);
-            item->setData(Qt::UserRole + 1, day);
-            item->setData(Qt::UserRole + 2, time);
-            item->setData(Qt::UserRole + 3, dir);
-            m_demandList->addItem(item);
+            std::string key = d["key"].get<std::string>();
+            int count = d["count"].get<int>();
+            QStringList parts = QString::fromStdString(key).split('|');
+            if (parts.size() == 4) {
+                int rid = parts[0].toInt();
+                QString rname = "Route " + parts[0];
+                for(int i=0; i<m_scheduleRouteBox->count(); ++i) {
+                    if (m_scheduleRouteBox->itemData(i).toInt() == rid) {
+                        rname = m_scheduleRouteBox->itemText(i); break;
+                    }
+                }
+                QString text = QString("[%1] %2 | %3 | %4  --> %5 requests")
+                               .arg(rname).arg(parts[1]).arg(parts[2]).arg(parts[3]).arg(count);
+                m_demandList->addItem(text);
+            }
         }
     } else if (type == MSG_OK) {
         showStatus(QString::fromStdString(msg.value("message","")), false);
@@ -222,7 +309,7 @@ void AdminDashboard::onUserSelected(QListWidgetItem* item) {
     req["type"]   = MSG_GET_USER_DETAIL;
     req["userId"] = m_selectedUserId;
     m_net->sendRequest(req);
-    m_tabs->setCurrentIndex(3);
+    m_tabs->setCurrentIndex(2);
 }
 
 void AdminDashboard::onMessageUserDetail(const nlohmann::json& msg) {
@@ -231,11 +318,10 @@ void AdminDashboard::onMessageUserDetail(const nlohmann::json& msg) {
 
     m_userDetailSubsList->clear();
     for (const auto& r : msg["subscriptions"]) {
-        QString text = QString("Route #%1: %2  |  Stops: %3  |  Schedule: %4")
+        QString text = QString("Route #%1: %2  |  Stops: %3")
             .arg(r["id"].get<int>())
             .arg(QString::fromStdString(r["name"].get<std::string>()))
-            .arg(QString::fromStdString(r["stops"].get<std::string>()))
-            .arg(QString::fromStdString(r["schedule"].get<std::string>()));
+            .arg(QString::fromStdString(r["stops"].get<std::string>()));
         m_userDetailSubsList->addItem(text);
     }
     if (msg["subscriptions"].empty())
@@ -252,18 +338,6 @@ void AdminDashboard::onMessageUserDetail(const nlohmann::json& msg) {
     }
     if (msg["tickets"].empty())
         m_userDetailTicketsList->addItem("(no tickets issued)");
-
-    m_userDetailFreeTime->clear();
-    for (const auto& v : msg["freeTime"]) {
-        QString text = QString("Route #%1  |  Day: %2  |  Time: %3  |  Direction: %4")
-            .arg(v["routeId"].get<int>())
-            .arg(QString::fromStdString(v["day"].get<std::string>()))
-            .arg(QString::fromStdString(v["timeSlot"].get<std::string>()))
-            .arg(QString::fromStdString(v["direction"].get<std::string>()));
-        m_userDetailFreeTime->addItem(text);
-    }
-    if (msg["freeTime"].empty())
-        m_userDetailFreeTime->addItem("(no free time preferences set)");
 }
 
 } // namespace bus

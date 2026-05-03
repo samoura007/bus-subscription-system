@@ -5,6 +5,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QTabWidget>
+#include <QComboBox>
+#include <map>
 #include "../network/NetworkManager.h"
 
 namespace bus {
@@ -12,10 +14,7 @@ namespace bus {
 class AdminDashboard : public QWidget {
     Q_OBJECT
 public:
-    explicit AdminDashboard(NetworkManager* net,
-                            int userId,
-                            const QString& username,
-                            QWidget* parent = nullptr);
+    explicit AdminDashboard(NetworkManager* net, int userId, const QString& username, QWidget* parent = nullptr);
     void refresh();
 
 signals:
@@ -24,7 +23,9 @@ signals:
 private slots:
     void onAddRouteClicked();
     void onDeleteRouteClicked();
-    void onDispatchBusClicked();
+    void onAddTripClicked();
+    void onDeleteTripClicked();
+    void onRouteSelectionChanged();
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
     void onUserSelected(QListWidgetItem* item);
@@ -37,19 +38,25 @@ private:
     NetworkManager* m_net;
     int             m_userId;
     QListWidget* m_routesList;
+    QLineEdit* m_routeNameEdit;
+    QLineEdit* m_routeStopsEdit;
     QListWidget* m_usersList;
-    QListWidget* m_demandList;
-    QLineEdit*   m_routeNameEdit;
-    QLineEdit*   m_routeStopsEdit;
-    QLineEdit*   m_routeScheduleEdit;
-    QLabel*      m_statusLabel;
-    QTabWidget*  m_tabs                  = nullptr;
+    QTabWidget* m_tabs;
+    QLabel* m_statusLabel;
+    int             m_selectedUserId = 0;
 
-    QListWidget* m_userDetailSubsList    = nullptr;
-    QListWidget* m_userDetailTicketsList = nullptr;
-    QListWidget* m_userDetailFreeTime    = nullptr;
-    QLabel*      m_userDetailNameLabel   = nullptr;
-    int          m_selectedUserId        = -1;
+    // Schedule Management UI
+    QComboBox* m_scheduleRouteBox;
+    QListWidget* m_tripsList;
+    QLineEdit* m_addTripTimeEdit;
+    QLineEdit* m_addTripDestEdit;
+    QListWidget* m_demandList; // To show user requests
+    std::map<int, nlohmann::json> m_routesData;
+
+    // User details UI
+    QLabel* m_userDetailNameLabel;
+    QListWidget* m_userDetailSubsList;
+    QListWidget* m_userDetailTicketsList;
 };
 
 } // namespace bus

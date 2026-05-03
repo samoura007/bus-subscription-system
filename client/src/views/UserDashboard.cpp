@@ -6,13 +6,11 @@
 
 namespace bus {
 
-static const QStringList WEEKDAYS = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"};
-
 UserDashboard::UserDashboard(NetworkManager* net, int userId, const QString& username, QWidget* parent)
     : QWidget(parent), m_net(net), m_userId(userId)
 {
     buildUI();
-    setWindowTitle("Welcome, " + username);
+    setWindowTitle("User Dashboard - " + username);
     connect(m_net, &NetworkManager::messageReceived, this, &UserDashboard::onMessageReceived);
     connect(m_net, &NetworkManager::networkError, this, &UserDashboard::onNetworkError);
 }
@@ -22,34 +20,72 @@ void UserDashboard::buildUI() {
     auto* topBar = new QHBoxLayout;
     auto* logoutBtn  = new QPushButton("Logout");
     auto* refreshBtn = new QPushButton("Refresh");
+
     topBar->addStretch();
     topBar->addWidget(refreshBtn);
     topBar->addWidget(logoutBtn);
     root->addLayout(topBar);
 
     connect(logoutBtn,  &QPushButton::clicked, this, &UserDashboard::logoutRequested);
-    connect(refreshBtn, &QPushButton::clicked, this, &UserDashboard::onRefreshClicked);
+    connect(refreshBtn, &QPushButton::clicked, this, [this]{ refresh(); });
 
-    auto* tabs = new QTabWidget;
+    m_tabs = new QTabWidget;
+    auto* tabs = m_tabs;
 
     // ---- Routes tab ----
-    auto* routesW  = new QWidget;
-    auto* routesL  = new QVBoxLayout(routesW);
-    m_routesList   = new QListWidget;
-    auto* subBtn   = new QPushButton("Subscribe to Selected Route");
+    auto* routesW = new QWidget;
+    auto* routesL = new QVBoxLayout(routesW);
+    m_routesList  = new QListWidget;
+    auto* subBtn  = new QPushButton("Subscribe to Selected");
     auto* bookBtn = new QPushButton("Book Ticket/Ride on Selected Route");
     routesL->addWidget(new QLabel("Available Routes:"));
     routesL->addWidget(m_routesList);
     routesL->addWidget(subBtn);
     routesL->addWidget(bookBtn);
-    connect(subBtn, &QPushButton::clicked, this, &UserDashboard::onSubscribeClicked);
+    connect(subBtn,  &QPushButton::clicked, this, &UserDashboard::onSubscribeClicked);
     connect(bookBtn, &QPushButton::clicked, this, &UserDashboard::onBookRideClicked);
     tabs->addTab(routesW, "Routes");
 
+    // ---- Request Time Slots tab ----
+    auto* reqW = new QWidget;
+    auto* reqL = new QVBoxLayout(reqW);
+    auto* reqForm = new QFormLayout;
+    m_reqRouteBox = new QComboBox;
+    m_reqDayBox = new QComboBox;
+    m_reqDayBox->addItems({"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"});
+    m_reqTimeBox = new QComboBox;
+    m_reqTimeBox->addItems({"07:00 AM", "08:30 AM", "10:00 AM", "11:30 AM", "01:00 PM", "02:30 PM", "04:00 PM", "05:30 PM"});
+    
+    // Changing Direction to Destination dynamically
+    m_reqDestBox = new QComboBox;
+
+    reqForm->addRow("Select Route:", m_reqRouteBox);
+    reqForm->addRow("Day:", m_reqDayBox);
+    reqForm->addRow("Time:", m_reqTimeBox);
+    reqForm->addRow("Destination:", m_reqDestBox); // Display "Destination" instead of "Direction"
+    
+    // Connect route selection change to update the destination combo box
+    connect(m_reqRouteBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &UserDashboard::onReqRouteSelectionChanged);
+    
+    auto* addReqBtn = new QPushButton("Submit Request");
+    auto* delReqBtn = new QPushButton("Delete Selected Request");
+    m_myRequestsList = new QListWidget;
+
+    reqL->addWidget(new QLabel("Request specific bus times to help Admin plan schedules:"));
+    reqL->addLayout(reqForm);
+    reqL->addWidget(addReqBtn);
+    reqL->addWidget(new QLabel("My Current Requests:"));
+    reqL->addWidget(m_myRequestsList);
+    reqL->addWidget(delReqBtn);
+
+    connect(addReqBtn, &QPushButton::clicked, this, &UserDashboard::onAddRequestClicked);
+    connect(delReqBtn, &QPushButton::clicked, this, &UserDashboard::onDeleteRequestClicked);
+    tabs->addTab(reqW, "Request Time Slots");
+
     // ---- Subscriptions tab ----
-    auto* subsW    = new QWidget;
-    auto* subsL    = new QVBoxLayout(subsW);
-    m_subsList     = new QListWidget;
+    auto* subsW = new QWidget;
+    auto* subsL = new QVBoxLayout(subsW);
+    m_subsList  = new QListWidget;
     auto* unsubBtn = new QPushButton("Unsubscribe from Selected");
     subsL->addWidget(new QLabel("My Subscriptions:"));
     subsL->addWidget(m_subsList);
@@ -65,38 +101,6 @@ void UserDashboard::buildUI() {
     ticketsL->addWidget(m_ticketsList);
     tabs->addTab(ticketsW, "Tickets");
 
-    // ---- Request a Slot tab ----
-    auto* voteW = new QWidget;
-    auto* voteL = new QVBoxLayout(voteW);
-    auto* form  = new QFormLayout;
-    
-    m_voteRouteBox = new QComboBox;
-    m_voteDayBox   = new QComboBox;
-    m_voteDayBox->addItems(WEEKDAYS);
-    m_voteDestBox  = new QComboBox;
-    m_voteTimeBox  = new QComboBox;
-    
-    form->addRow("Subscribed Route:", m_voteRouteBox);
-    form->addRow("Day:", m_voteDayBox);
-    form->addRow("Destination:", m_voteDestBox);
-    form->addRow("Time Slot:", m_voteTimeBox);
-    
-    connect(m_voteRouteBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &UserDashboard::onRouteSelectionChanged);
-    
-    auto* addVoteBtn = new QPushButton("Add to My Time Slot Requests");
-    m_myVotesList = new QListWidget;
-    auto* saveVotesBtn = new QPushButton("Submit Time Slot Requests");
-    
-    voteL->addLayout(form);
-    voteL->addWidget(addVoteBtn);
-    voteL->addWidget(new QLabel("Time Slot Request List:"));
-    voteL->addWidget(m_myVotesList);
-    voteL->addWidget(saveVotesBtn);
-    
-    connect(addVoteBtn, &QPushButton::clicked, this, &UserDashboard::onAddVoteClicked);
-    connect(saveVotesBtn, &QPushButton::clicked, this, &UserDashboard::onSaveVotesClicked);
-    
-    tabs->addTab(voteW, "Request a Slot");
     root->addWidget(tabs);
 
     m_statusLabel = new QLabel;
@@ -105,162 +109,161 @@ void UserDashboard::buildUI() {
 }
 
 void UserDashboard::refresh() {
-    nlohmann::json r1; r1["type"] = MSG_GET_ROUTES; m_net->sendRequest(r1);
-    nlohmann::json r2; r2["type"] = MSG_GET_SUBS; m_net->sendRequest(r2);
+    nlohmann::json r1; r1["type"] = MSG_GET_ROUTES;  m_net->sendRequest(r1);
+    nlohmann::json r2; r2["type"] = MSG_GET_SUBS;    m_net->sendRequest(r2);
     nlohmann::json r3; r3["type"] = MSG_GET_TICKETS; m_net->sendRequest(r3);
-    nlohmann::json r4; r4["type"] = MSG_GET_VOTES; m_net->sendRequest(r4);
+    nlohmann::json r4; r4["type"] = MSG_GET_VOTES;   m_net->sendRequest(r4);
 }
 
-void UserDashboard::onRefreshClicked() { refresh(); }
+void UserDashboard::onReqRouteSelectionChanged() {
+    m_reqDestBox->clear();
+    if (m_reqRouteBox->count() == 0) return;
+    
+    // First option is always "AUC"
+    m_reqDestBox->addItem("AUC");
+    
+    // Dynamically figure out the second option from route name (e.g., "AUC -> Nasr City")
+    QString routeName = m_reqRouteBox->currentText();
+    int arrowIdx = routeName.indexOf("->");
+    if (arrowIdx != -1) {
+        QString dest = routeName.mid(arrowIdx + 2).trimmed();
+        m_reqDestBox->addItem(dest);
+    } else {
+        // Fallback for non-standard names
+        QString dest = routeName;
+        dest.remove("AUC").trimmed();
+        if (dest.isEmpty()) dest = "Other Stop";
+        m_reqDestBox->addItem(dest);
+    }
+}
 
 void UserDashboard::onSubscribeClicked() {
     auto* item = m_routesList->currentItem();
-    if (!item) { showStatus("Select a route first.", true); return; }
+    if (!item) { showStatus("Select a route.", true); return; }
     nlohmann::json req; req["type"] = MSG_SUBSCRIBE; req["routeId"] = item->data(Qt::UserRole).toInt();
     m_net->sendRequest(req);
 }
 
 void UserDashboard::onUnsubscribeClicked() {
     auto* item = m_subsList->currentItem();
-    if (!item) { showStatus("Select a subscription first.", true); return; }
+    if (!item) { showStatus("Select a subscription.", true); return; }
     nlohmann::json req; req["type"] = MSG_UNSUBSCRIBE; req["routeId"] = item->data(Qt::UserRole).toInt();
     m_net->sendRequest(req);
 }
 
 void UserDashboard::onBookRideClicked() {
     auto* item = m_routesList->currentItem();
-    if (!item) { showStatus("Select a route first.", true); return; }
+    if (!item) { showStatus("Select a route to ride.", true); return; }
     nlohmann::json req; req["type"] = MSG_RIDE; req["routeId"] = item->data(Qt::UserRole).toInt();
     m_net->sendRequest(req);
 }
 
-void UserDashboard::onRouteSelectionChanged(int index) {
-    m_voteTimeBox->clear();
-    m_voteDestBox->clear();
-    
-    if (index < 0) return;
-    
-    int routeId = m_voteRouteBox->itemData(index).toInt();
-    
-    // 1. Populate the valid time slots
-    QString sched = m_routeSchedules[routeId];
-    for (const QString& t : sched.split(",", Qt::SkipEmptyParts)) {
-        m_voteTimeBox->addItem(t.trimmed());
-    }
-    
-    // 2. Parse the Route Name to dynamically generate the Destinations
-    QString routeName = m_voteRouteBox->itemText(index);
-    QString otherDestination = routeName;
-    
-    // Assuming routes are named like "AUC -> Nasr City"
-    int arrowIdx = routeName.indexOf("->");
-    if (arrowIdx != -1) {
-        otherDestination = routeName.mid(arrowIdx + 2).trimmed(); // Extract "Nasr City"
-    } else {
-        // Fallback if the route name doesn't contain "->"
-        otherDestination.replace("AUC", "", Qt::CaseInsensitive);
-        otherDestination = otherDestination.trimmed();
-        if (otherDestination.isEmpty()) otherDestination = "Other Stop";
-    }
-    
-    m_voteDestBox->addItem("University");
-    m_voteDestBox->addItem(otherDestination);
-}
+void UserDashboard::onAddRequestClicked() {
+    int idx = m_reqRouteBox->currentIndex();
+    if (idx < 0) return;
+    int rid = m_reqRouteBox->itemData(idx).toInt();
 
-void UserDashboard::onAddVoteClicked() {
-    if (m_voteRouteBox->count() == 0 || m_voteTimeBox->count() == 0) return;
-    int routeId = m_voteRouteBox->currentData().toInt();
-    QString text = m_voteRouteBox->currentText() + " | " + m_voteDayBox->currentText() + " | " + m_voteDestBox->currentText() + " | " + m_voteTimeBox->currentText();
-    
-    // Check duplicates
-    for(int i = 0; i < m_myVotesList->count(); i++) {
-        if(m_myVotesList->item(i)->text() == text) return;
-    }
-    
-    auto* item = new QListWidgetItem(text);
-    item->setData(Qt::UserRole, routeId);
-    item->setData(Qt::UserRole + 1, m_voteDayBox->currentText());
-    item->setData(Qt::UserRole + 2, m_voteTimeBox->currentText());
-    item->setData(Qt::UserRole + 3, m_voteDestBox->currentText());
-    m_myVotesList->addItem(item);
-}
+    nlohmann::json v;
+    v["routeId"] = rid;
+    v["day"] = m_reqDayBox->currentText().toStdString();
+    v["timeSlot"] = m_reqTimeBox->currentText().toStdString();
+    v["destination"] = m_reqDestBox->currentText().toStdString();
 
-void UserDashboard::onSaveVotesClicked() {
-    nlohmann::json votesArray = nlohmann::json::array();
-    for (int i = 0; i < m_myVotesList->count(); i++) {
-        auto* item = m_myVotesList->item(i);
-        nlohmann::json vote;
-        vote["routeId"]   = item->data(Qt::UserRole).toInt();
-        vote["day"]       = item->data(Qt::UserRole + 1).toString().toStdString();
-        vote["timeSlot"]  = item->data(Qt::UserRole + 2).toString().toStdString();
-        
-        // We keep the JSON key as "direction" to ensure compatibility with the Server 
-        // without needing to rewrite backend Models/Database structs.
-        vote["direction"] = item->data(Qt::UserRole + 3).toString().toStdString(); 
-        
-        votesArray.push_back(vote);
-    }
-    nlohmann::json req; req["type"] = MSG_SET_VOTES; req["votes"] = votesArray;
+    m_myVotes.push_back(v);
+
+    nlohmann::json req;
+    req["type"] = MSG_SET_VOTES;
+    req["votes"] = m_myVotes;
     m_net->sendRequest(req);
+}
+
+void UserDashboard::onDeleteRequestClicked() {
+    auto* item = m_myRequestsList->currentItem();
+    if (!item) return;
+    int row = m_myRequestsList->row(item);
+    if (row >= 0 && row < m_myVotes.size()) {
+        m_myVotes.erase(m_myVotes.begin() + row);
+        nlohmann::json req;
+        req["type"] = MSG_SET_VOTES;
+        req["votes"] = m_myVotes;
+        m_net->sendRequest(req);
+    }
 }
 
 void UserDashboard::onMessageReceived(const nlohmann::json& msg) {
     std::string type = msg.value("type", "");
+
     if (type == MSG_ROUTES_LIST) {
         m_routesList->clear();
+        m_reqRouteBox->blockSignals(true);
+        m_reqRouteBox->clear();
         for (const auto& r : msg["routes"]) {
-            auto* item = new QListWidgetItem(QString::fromStdString(r["name"].get<std::string>()) + "  |  " + QString::fromStdString(r["stops"].get<std::string>()));
-            item->setData(Qt::UserRole, r["id"].get<int>());
+            int rid = r["id"].get<int>();
+            QString name = QString::fromStdString(r["name"].get<std::string>());
+            QString schedStr = QString::fromStdString(r["schedule"].get<std::string>());
+            
+            m_reqRouteBox->addItem(name, rid);
+
+            QString tripsText = "";
+            try {
+                auto arr = nlohmann::json::parse(schedStr.toStdString());
+                for (const auto& t : arr) {
+                    tripsText += "[" + QString::fromStdString(t.value("time","")) + " -> " + QString::fromStdString(t.value("destination","")) + "] ";
+                }
+            } catch(...) {
+                tripsText = schedStr;
+            }
+            
+            QString text = "Route #" + QString::number(rid) + ": " + name + " | Schedule: " + tripsText;
+            auto* item = new QListWidgetItem(text);
+            item->setData(Qt::UserRole, rid);
             m_routesList->addItem(item);
         }
+        m_reqRouteBox->blockSignals(false);
+        onReqRouteSelectionChanged(); // Initialize the dynamic Destination Box based on whatever route loaded first
     } else if (type == MSG_SUBS_LIST) {
         m_subsList->clear();
-        m_voteRouteBox->clear();
-        m_routeSchedules.clear();
-        for (const auto& r : msg["subscriptions"]) {
-            int rId = r["id"].get<int>();
-            QString name = QString::fromStdString(r["name"].get<std::string>());
-            QString sched = QString::fromStdString(r["schedule"].get<std::string>());
-            m_routeSchedules[rId] = sched;
-            
-            auto* item = new QListWidgetItem(name);
-            item->setData(Qt::UserRole, rId);
-            m_subsList->addItem(item);
-            m_voteRouteBox->addItem(name, rId);
-        }
-    } else if (type == MSG_TICKETS) {
-        if (msg.contains("tickets")) {
-            m_ticketsList->clear();
-            for (const auto& t : msg["tickets"]) {
-                QString chargeStatus = t.value("charged", false) ? "[Charged]" : "[Free]";
-                int price = t.value("price", 0);
-                QString text = "Ticket #" + QString::number(t["id"].get<int>()) + "  Route: " + QString::number(t["routeId"].get<int>()) + "  At: " + QString::fromStdString(t["issuedAt"].get<std::string>()) + " " + chargeStatus + " | Price: " + QString::number(price) + " EGP";
-                m_ticketsList->addItem(text);
+        for (const auto& jId : msg["subs"]) {
+            int routeId = jId.get<int>();
+            for (int i = 0; i < m_routesList->count(); ++i) {
+                if (m_routesList->item(i)->data(Qt::UserRole).toInt() == routeId) {
+                    auto* item = new QListWidgetItem(m_routesList->item(i)->text());
+                    item->setData(Qt::UserRole, routeId);
+                    m_subsList->addItem(item);
+                    break;
+                }
             }
-        } else if (msg.contains("message")) {
-            showStatus(QString::fromStdString(msg["message"].get<std::string>()), msg.value("ticketIssued", false));
-            nlohmann::json r; r["type"] = MSG_GET_TICKETS; m_net->sendRequest(r);
         }
     } else if (type == MSG_VOTES_LIST) {
-        m_myVotesList->clear();
+        m_myVotes.clear();
+        m_myRequestsList->clear();
         for (const auto& v : msg["votes"]) {
-            int routeId = v.value("routeId", 0);
-            QString day = QString::fromStdString(v.value("day",""));
-            QString timeSlot = QString::fromStdString(v.value("timeSlot",""));
-            QString dir = QString::fromStdString(v.value("direction","")); // Contains "University" or "Nasr City"
-            QString text = "Route " + QString::number(routeId) + " | " + day + " | " + dir + " | " + timeSlot;
-            auto* item = new QListWidgetItem(text);
-            item->setData(Qt::UserRole, routeId);
-            item->setData(Qt::UserRole + 1, day);
-            item->setData(Qt::UserRole + 2, timeSlot);
-            item->setData(Qt::UserRole + 3, dir);
-            m_myVotesList->addItem(item);
+            m_myVotes.push_back(v);
+            int rid = v["routeId"].get<int>();
+            QString text = "Route ID " + QString::number(rid) + " | " +
+                           QString::fromStdString(v["day"].get<std::string>()) + " | " +
+                           QString::fromStdString(v["timeSlot"].get<std::string>()) + " | " +
+                           QString::fromStdString(v["destination"].get<std::string>());
+            m_myRequestsList->addItem(text);
+        }
+    } else if (type == MSG_TICKETS) {
+        m_ticketsList->clear();
+        for (const auto& t : msg["tickets"]) {
+            QString chargeStatus = t["charged"].get<bool>() ? "(CHARGED)" : "(PENDING)";
+            int price = t.value("price", 0);
+            QString text = "Ticket #" + QString::number(t["id"].get<int>())
+                         + "  Route: " + QString::number(t["routeId"].get<int>())
+                         + "  At: " + QString::fromStdString(t["issuedAt"].get<std::string>())
+                         + " " + chargeStatus + " | Price: " + QString::number(price) + " EGP";
+            m_ticketsList->addItem(text);
         }
     } else if (type == MSG_OK) {
-        showStatus(QString::fromStdString(msg.value("message","")), false);
+        if (msg.contains("message")) {
+            showStatus(QString::fromStdString(msg["message"].get<std::string>()), msg.value("ticketIssued", false));
+        }
         refresh();
     } else if (type == MSG_ERROR) {
-        showStatus(QString::fromStdString(msg.value("message","Error")), true);
+        showStatus(QString::fromStdString(msg.value("message", "Error")), true);
     }
 }
 
