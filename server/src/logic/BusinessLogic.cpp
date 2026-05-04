@@ -129,9 +129,25 @@ void BusinessLogic::handleDelRoute(INetworkClient* client, int uid, const nlohma
 }
 
 void BusinessLogic::handleSubscribe(INetworkClient* client, int uid, const nlohmann::json& req) {
-    if (m_store.subscribe(uid, req.value("routeId", 0))) client->sendMessage(makeOk("Subscribed"));
-    else client->sendMessage(makeError("Already subscribed"));
+    int rid = req.value("routeId", 0);
+    
+    // FIX: Check if the route actually exists before subscribing
+    if (!m_store.findRouteById(rid).has_value()) {
+        client->sendMessage(makeError("Cannot subscribe: Route does not exist."));
+        return;
+    }
+
+    if (m_store.subscribe(uid, rid)) {
+        nlohmann::json reply;
+        reply["type"] = MSG_OK;
+        reply["message"] = "Subscribed successfully!";
+        client->sendMessage(reply);
+    } else {
+        client->sendMessage(makeError("Already subscribed to this route."));
+    }
 }
+
+
 
 void BusinessLogic::handleUnsubscribe(INetworkClient* client, int uid, const nlohmann::json& req) {
     if (m_store.unsubscribe(uid, req.value("routeId", 0))) client->sendMessage(makeOk("Unsubscribed"));
@@ -149,7 +165,11 @@ void BusinessLogic::handleRide(INetworkClient* client, int uid, const nlohmann::
     int rid = req.value("routeId", 0);
     nlohmann::json reply;
     reply["type"] = MSG_OK;
+
+    // FIX: Ensure we explicitly check subscription.
+    // If subscribed, ticketIssued MUST be false.
     if (m_store.isSubscribed(uid, rid)) {
+        reply["ticketIssued"] = false; // Explicitly set to false for clarity
         reply["message"] = "Ride recorded. Have a safe trip!";
     } else {
         int tid = m_store.issueTicket(uid, rid, currentTimestamp(), true, 50);

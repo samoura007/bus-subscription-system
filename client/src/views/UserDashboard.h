@@ -13,6 +13,7 @@ namespace bus {
 
 class UserDashboard : public QWidget {
     Q_OBJECT
+
 public:
     explicit UserDashboard(NetworkManager* net, int userId, const QString& username, QWidget* parent = nullptr);
     void refresh();
@@ -26,7 +27,7 @@ private slots:
     void onBookRideClicked();
     void onAddRequestClicked();
     void onDeleteRequestClicked();
-    void onReqRouteSelectionChanged(); // NEW: Slot to update Destination combobox
+    void onReqRouteSelectionChanged(); 
     void onMessageReceived(const nlohmann::json& msg);
     void onNetworkError(const QString& error);
 
@@ -36,18 +37,25 @@ private:
 
     NetworkManager* m_net;
     int             m_userId;
+    
+    // UI Lists
     QListWidget* m_routesList;
     QListWidget* m_subsList;
     QListWidget* m_ticketsList;
+    QListWidget* m_myRequestsList; // <--- Added this to fix your current error
+
+    // UI Labels
     QLabel* m_statusLabel;
+    QLabel* m_totalPaymentLabel; // <--- Added this to fix the previous error
+    
     QTabWidget* m_tabs;
 
     // Time Slot Requests
     QComboBox* m_reqRouteBox;
     QComboBox* m_reqDayBox;
     QComboBox* m_reqTimeBox;
-    QComboBox* m_reqDestBox; // CHANGED: Replaced DirBox with DestBox
-    QListWidget* m_myRequestsList;
+    QComboBox* m_reqDestBox; 
+
     std::vector<nlohmann::json> m_myVotes;
 };
 
