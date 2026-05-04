@@ -11,4 +11,4 @@ Instructions on how to run the application:-
 7. In the second terminal, make sure you are in the directory ~/bus-subscription-system/build and run the command "./bin/bus_client" to run the application
 
 Admin username:- admin
-Admin password:- admin123
+Admin password:- admin
